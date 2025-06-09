@@ -1499,8 +1499,10 @@ function main()
                         NXsettings.AllowDenylistPage.MultilineTextBox = this.checked
                         saveSettings()
 
-                        if (this.checked)
+                        if (this.checked) {
                             createAllowDenylistTextArea()
+                            createAllowDenyExternalListTextArea()
+                        }
                     }
 
                     optionsContainer.appendChild(multiLineSwitch)
@@ -1572,8 +1574,10 @@ function main()
                 if (NXsettings.AllowDenylistPage.RightAligned)
                     styleDomains("rightAlign", NXsettings.AllowDenylistPage.RightAligned)
 
-                if (NXsettings.AllowDenylistPage.MultilineTextBox)
+                if (NXsettings.AllowDenylistPage.MultilineTextBox) {
                     createAllowDenylistTextArea()
+                    createAllowDenyExternalListTextArea()
+                }
 
                 let urlList = []; // Global variable to hold URLs
 
