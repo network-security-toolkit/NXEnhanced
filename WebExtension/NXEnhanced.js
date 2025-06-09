@@ -1575,11 +1575,145 @@ function main()
                 if (NXsettings.AllowDenylistPage.MultilineTextBox)
                     createAllowDenylistTextArea()
 
+                let urlList = []; // Global variable to hold URLs
+
+                async function fetchURLListAndStore(url) {
+                    try {
+                        const response = await fetch(url);
+                        if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
+
+                        const text = await response.text();
+
+                        // Parse URLs: split by line, trim, and remove empty lines
+                        urlList = text
+                        .split('\n')
+                        .map(line => line.trim())
+                        .filter(line => line.length > 0);
+
+                        console.log("Fetched URLs:", urlList);
+                    } catch (error) {
+                        console.error("Failed to fetch URL list:", error);
+                    }
+                }
 
 
+                function createAllowDenyExternalListTextArea() {
+                    // Make the input box allow adding a list of domains
 
-                function createAllowDenylistTextArea()
-                {
+                    const input = document.querySelector("form input")
+
+                    if (!input)  return
+
+                    const inputHtml = input.outerHTML.replace("<input ", "<textarea ")                          // Swap the input to a textarea to make it multi-line.
+                    const container = input.parentElement.parentElement.parentElement
+                    container.firstChild.remove()                                                               // Replace with the textarea, the form that contains the input.
+
+                    let textArea = (new DOMParser).parseFromString(inputHtml, "text/html").body.firstChild      // It's required to parseFromString the HTML in order to pass AMO's code validation.
+                    container.appendChild(textArea)
+
+                    textArea = container.firstChild
+                    textArea.style = "height: 63px; background-position-x: calc(100% - 20px); min-height: 38px;"
+                    textArea.placeholder = "Add list URL, containing one URL per line. Comments can be prefixed by # and will be excluded"
+                    textArea.onkeypress = async function()
+                    {
+                        this.classList.remove("is-invalid")
+                        this.nextSibling.textContent = ""
+
+                        if (event.key == "Enter" && !event.shiftKey)                                            // Allow shift+ctrl to break line.
+                        {
+                            event.preventDefault()
+
+                            const list = (/allowlist$/.test(location.href)) ? "allowlist" : "denylist"
+                            const url = this.value
+                            const domains = fetchURLListAndStore(url)
+                            let numFinishedRequests = numImportedDomains = 0
+
+                            if (domains.length > 60)
+                            {
+                                let estimatedTime = ((domains.length + domains.length * 0.2)/60).toFixed(2)     // Get the gross time estimate and then add a rough estimate of the time it would take to actually finish each request, which would be around 200 ms each.
+                                const estimatedTimeSplit = estimatedTime.split(".")
+                                estimatedTime = estimatedTimeSplit[0] + ":" + estimatedTimeSplit[1] * 0.6       // Convert minutes in decimal to MM:SS.
+
+                                if (!confirm("It seems you are trying to import a long list of domains. Keep in mind that the server limits importing one " +
+                                             "domain per second. This means that the list you are trying to import would take around "+ estimatedTime +
+                                             " minutes to finish adding all the "+domains.length+" domains.\n\nIf this is a publicly available list you can instead suggest this list being included " +
+                                             "among the blocklists at github.com/nextdns/metadata\n\nAre you sure you want to continue?"))
+                                    return
+                            }
+                            else if (domains.length == 0)
+                                return
+
+
+                            createSpinner(spinnerContainer)
+                            currentDomainSpan.style.marginLeft = "10px"
+
+                            domains.reverse()                                           // Reverse the list so that the first item is the last one to be added,
+                                                                                        // appearing at the top in NextDNS, this way preserving the original order.
+                            for (let i=0; i < domains.length; i++)
+                            {
+                                const domain = domains[i].trim()
+
+                                await sleep(1000)
+
+                                currentDomainSpan.textContent = domain
+
+                                makeApiRequest("POST", list, {id: domain, active: true}).then(function(response)
+                                {
+                                    numImportedDomains++
+                                    errorMsgSpan.textContent = ""
+
+                                }).catch(function(response)
+                                {
+                                    let error
+
+                                    if (response.includes("duplicate"))
+                                        error = "This domain has already been added: " + domain
+                                    else if (response.includes("invalid"))
+                                        error = "Invalid domain: " + domain
+
+                                    textArea.classList.add("is-invalid")
+                                    errorMsgSpan.textContent = error
+                                    errorMsgSpan.className = "invalid-feedback"
+
+                                }).finally(function()
+                                {
+                                    numFinishedRequests++
+
+                                    if (numFinishedRequests == domains.length)
+                                    {
+                                        if (numImportedDomains > 0)
+                                        {
+                                            currentDomainSpan.remove()
+                                            spinnerContainer.outerHTML = '✔️'
+                                            setTimeout(() => location.reload(), 500)
+                                        }
+                                        else
+                                        {
+                                            spinnerContainer.firstChild.outerHTML = ""
+                                            currentDomainSpan.textContent = ""
+                                            currentDomainSpan.style.marginLeft = ""
+                                        }
+                                    }
+                                })
+                            }
+                        }
+                    }
+
+                    const errorMsgSpan = document.createElement("span")
+                    errorMsgSpan.className = "invalid-feedback"
+                    container.appendChild(errorMsgSpan)
+
+                    const spinnerContainer = document.createElement("span")
+                    container.appendChild(spinnerContainer)
+
+                    const currentDomainSpan = document.createElement("span")
+                    container.appendChild(currentDomainSpan)
+                
+                
+                
+                }
+
+                function createAllowDenylistTextArea() {
                     // Make the input box allow adding a list of domains
 
                     const input = document.querySelector("form input")
@@ -1689,6 +1823,7 @@ function main()
 
                     const currentDomainSpan = document.createElement("span")
                     container.appendChild(currentDomainSpan)
+                
                 }
 
             }
